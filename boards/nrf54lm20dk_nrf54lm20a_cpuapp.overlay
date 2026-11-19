@@ -1,0 +1,173 @@
+/*
+ * nRF54LM20A application overlay:
+ * - remove every on-board peripheral node (LEDs, buttons, UART, SPI, ADC, PWM,
+ *   NFC, 802.15.4, USB, temp sensor, GPIO ports)
+ * - keep a single I2C bus: SDA = P1.09, SCL = P1.11
+ * - attach the nPM1300 PMIC (charger only, no LED node) with its GPIO3
+ *   interrupt output wired to P0.09
+ */
+
+/ {
+	chosen {
+		/delete-property/ zephyr,console;
+		/delete-property/ zephyr,shell-uart;
+		/delete-property/ zephyr,uart-mcumgr;
+		/delete-property/ zephyr,bt-mon-uart;
+		/delete-property/ zephyr,bt-c2h-uart;
+		/delete-property/ zephyr,ieee802154;
+		/delete-property/ zephyr,usb-bc12;
+	};
+
+	aliases {
+		/delete-property/ led0;
+		/delete-property/ led1;
+		/delete-property/ led2;
+		/delete-property/ led3;
+		/delete-property/ pwm-led0;
+		/delete-property/ sw0;
+		/delete-property/ sw1;
+		/delete-property/ sw2;
+		/delete-property/ sw3;
+		/delete-property/ adc;
+		/delete-property/ mcuboot-button0;
+		/delete-property/ mcuboot-led0;
+	};
+
+	/delete-node/ leds;
+	/delete-node/ pwmleds;
+	/delete-node/ buttons;
+	/delete-node/ nordic_expansion_header;
+};
+
+/* Board peripherals that are enabled by the DK devicetree */
+&uart20 {
+	status = "disabled";
+};
+
+&uart30 {
+	status = "disabled";
+};
+
+&spi00 {
+	status = "disabled";
+};
+
+&spi22 {
+	status = "disabled";
+};
+
+&pwm20 {
+	status = "disabled";
+};
+
+&pwm21 {
+	status = "disabled";
+};
+
+&adc {
+	status = "disabled";
+};
+
+&nfct {
+	status = "disabled";
+};
+
+&ieee802154 {
+	status = "disabled";
+};
+
+&usbhs {
+	status = "disabled";
+};
+
+&usbhs_bc12 {
+	status = "disabled";
+};
+
+&temp {
+	status = "disabled";
+};
+
+/* 32 kHz comes from the internal RC oscillator, no external crystal */
+&lfxo {
+	status = "disabled";
+};
+
+/* No GPIO consumer in this application (PMIC interrupt is not used:
+ * GPOIRQ reflects raw event bits and the MFD driver does not clear the ADC
+ * and BCHARGER0 events, which keeps the line high and makes its work handler
+ * spin. VBUS/charge status is polled every 2 s instead.) */
+&gpio0 {
+	status = "disabled";
+};
+
+&gpio1 {
+	status = "disabled";
+};
+
+&gpio2 {
+	status = "disabled";
+};
+
+&gpio3 {
+	status = "disabled";
+};
+
+&gpiote20 {
+	status = "disabled";
+};
+
+/* gpiote30 is only needed by gpio0, which is unused */
+&gpiote30 {
+	status = "disabled";
+};
+
+/* Single I2C bus, SDA = P1.09, SCL = P1.11 */
+&pinctrl {
+	i2c21_default: i2c21_default {
+		group1 {
+			psels = <NRF_PSEL(TWIM_SDA, 1, 9)>,
+				<NRF_PSEL(TWIM_SCL, 1, 18)>;
+			bias-pull-up;
+		};
+	};
+
+	i2c21_sleep: i2c21_sleep {
+		group1 {
+			psels = <NRF_PSEL(TWIM_SDA, 1, 9)>,
+				<NRF_PSEL(TWIM_SCL, 1, 18)>;
+			low-power-enable;
+		};
+	};
+};
+
+&i2c21 {
+	status = "okay";
+	clock-frequency = <400000>;
+	pinctrl-0 = <&i2c21_default>;
+	pinctrl-1 = <&i2c21_sleep>;
+	pinctrl-names = "default", "sleep";
+	//zephyr,pm-device-runtime-auto;
+
+	npm1300_pmic: pmic@6b {
+		compatible = "nordic,npm1300";
+		reg = <0x6b>;
+
+		/* PMIC interrupt GPIO not used: GPOIRQ is a raw event OR and the MFD
+		 * driver leaves ADC/BCHARGER0 events uncleared, which would keep the
+		 * line high and spin its work handler. VBUS/charge status is polled.
+		 */
+
+		npm1300_charger: charger {
+			compatible = "nordic,npm1300-charger";
+			term-microvolt = <4150000>;
+			term-warm-microvolt = <4000000>;
+			current-microamp = <150000>;
+			dischg-limit-microamp = <1000000>;
+			vbus-limit-microamp = <500000>;
+			thermistor-ohms = <10000>;
+			thermistor-beta = <3380>;
+			charging-enable;
+		};
+	};
+};
